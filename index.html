@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>은밀한 초대장</title>
+
+<style>
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+button { -webkit-appearance: none; appearance: none; font: inherit; }
+
+body{
+  margin:0;
+  min-height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  padding:24px;
+  overflow:hidden;
+
+  background-image:
+    linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)),
+    url("01.jpg");
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+  transition: background-image .5s ease;
+
+  font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+}
+
+.card{
+  width:100%;
+  max-width:420px;
+  background:rgba(255,255,255,.95);
+  border-radius:20px;
+  padding:32px;
+  text-align:center;
+  box-shadow:0 15px 40px rgba(0,0,0,.25);
+  position:relative;
+  z-index:10;
+}
+
+h1{
+  font-size:20px;
+  line-height:1.6;
+  margin:0 0 24px;
+}
+
+.btn-container{
+  position:relative;
+  width:280px;
+  height:56px;
+  margin:0 auto;
+  touch-action: manipulation;
+}
+
+.btn{
+  position:absolute;
+  top:0;
+  width:120px;
+  height:48px;
+  border:none;
+  border-radius:30px;
+  font-size:16px;
+  cursor:pointer;
+  user-select:none;
+  z-index:20;
+  pointer-events:auto;
+  transition: transform .15s ease;
+}
+.btn:active{ transform:scale(.98); }
+
+.yes{ left:0; background:#ff4d6d; color:#fff; }
+.no { left:160px; background:#d6d6d6; color:#111; }
+
+/* 결과 */
+.result{
+  margin-top:18px;
+  font-size:20px;
+  font-weight:700;
+  color:#ff4d6d;
+  display:none;
+}
+
+/* 파티클 */
+.heart{
+  position:fixed;
+  pointer-events:none;
+  animation: float 2.8s linear forwards;
+  z-index:5;
+}
+@keyframes float{
+  0%{ transform:translateY(0); opacity:1; }
+  100%{ transform:translateY(-300px); opacity:0; }
+}
+</style>
+</head>
+
+<body>
+  <div class="card">
+    <h1>
+      ~초대장~<br>
+      잼얘와 섹시푸드가 함께하는 <br>
+      걸즈나잇에 참여하시겠습니까?
+    </h1>
+
+    <div class="btn-container" id="btnArea">
+      <button class="btn yes" id="yesBtn" type="button">Yes</button>
+      <button class="btn no" id="noBtn" type="button">No</button>
+    </div>
+
+    <div class="result" id="result">❤️ 대 환 영 ❤️ <br> 일시:26.02.25-26 장소:강릉 <br> 준비물:잼얘와 체력 </div>
+  </div>
+
+<script>
+(function () {
+  const yesBtn = document.getElementById("yesBtn");
+  const noBtn  = document.getElementById("noBtn");
+  const btnArea = document.getElementById("btnArea");
+  const result = document.getElementById("result");
+  if (!yesBtn || !noBtn || !btnArea) return;
+
+  // =========================
+  // 1) No 텍스트 단계 변경
+  // =========================
+  let noAttempts = 0;
+  const noStages = [
+    { at: 0,  text: "No" },
+    { at: 2,  text: "아 몰라" },
+    { at: 4,  text: "진짜?" },
+    { at: 7,  text: "그만해ㅠ" },
+    { at: 10, text: "ㅋㅋㅋㅋ" },
+    { at: 13, text: "도망간다!" }
+  ];
+  function updateNoText(){
+    let t = "No";
+    for (const s of noStages) if (noAttempts >= s.at) t = s.text;
+    noBtn.textContent = t;
+  }
+  updateNoText();
+
+  // =========================
+  // 2) Yes 효과
+  // =========================
+  yesBtn.addEventListener("click", () => {
+    document.body.style.backgroundImage =
+      'linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)), url("02.jpg")';
+    if (result) result.style.display = "block";
+    createHearts();
+  });
+
+  function createHearts(){
+    for(let i=0;i<22;i++){
+      const h=document.createElement("div");
+      h.className="heart";
+      h.textContent="❤️";
+      h.style.left = (Math.random()*window.innerWidth) + "px";
+      h.style.top  = window.innerHeight + "px";
+      h.style.fontSize = (16 + Math.random()*16) + "px";
+      document.body.appendChild(h);
+      setTimeout(()=>h.remove(), 2800);
+    }
+  }
+
+  // =========================
+  // 3) No를 화면 전체에서 "연결된 이동"으로 도망
+  // =========================
+
+  // 튜닝값
+  const SAFE_RADIUS = 130;     // 커서가 이 안으로 오면 도망(더 못 잡게: 140~170)
+  const EDGE_PADDING = 12;     // 화면 가장자리 여백
+  const FOLLOW = 0.22;         // 0~1, 클수록 target을 더 빨리 따라감(부드러움 유지하며 빠르게)
+  const MAX_STEP = 48;         // 프레임당 최대 이동(px) - 너무 크면 순간이동 느낌, 너무 작으면 잡힘
+
+  // noBtn을 fixed로 변경(화면 기준 이동)
+  // 현재 화면상의 위치를 고정값으로 변환해 자연스럽게 이어지게
+  const initialRect = noBtn.getBoundingClientRect();
+  noBtn.style.position = "fixed";
+  noBtn.style.left = initialRect.left + "px";
+  noBtn.style.top  = initialRect.top + "px";
+
+  let pos = { x: initialRect.left, y: initialRect.top };
+  let target = { x: pos.x, y: pos.y };
+  let pointer = { x: window.innerWidth/2, y: window.innerHeight/2 };
+  let lastTargetAt = 0;
+
+  // ✅ 추가: 처음엔 가만히 있다가 "가까워지거나 시도하면" 그때부터 도망
+  let started = false;
+  let rafId = null;
+
+  function startEscape(){
+    if (started) return;
+    started = true;
+
+    // 시작하자마자 커서가 근처면 바로 타겟 하나 잡아줌
+    if (isTooCloseToPointer(pos)) chooseNewTarget(true);
+    rafId = requestAnimationFrame(animate);
+  }
+
+  function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+  function getBtnCenter(p){
+    const w = noBtn.offsetWidth;
+    const h = noBtn.offsetHeight;
+    return { x: p.x + w/2, y: p.y + h/2, w, h };
+  }
+
+  function isTooCloseToPointer(nextPos){
+    const c = getBtnCenter(nextPos);
+    const d = Math.hypot(pointer.x - c.x, pointer.y - c.y);
+    return d < SAFE_RADIUS;
+  }
+
+  function randomTargetAway(){
+    const w = noBtn.offsetWidth;
+    const h = noBtn.offsetHeight;
+
+    const maxX = window.innerWidth - w - EDGE_PADDING;
+    const maxY = window.innerHeight - h - EDGE_PADDING;
+
+    // "마우스 반대 방향" 쪽을 우선해서 뽑아주면 더 안 잡힘
+    const pxNorm = pointer.x / window.innerWidth;   // 0~1
+    const pyNorm = pointer.y / window.innerHeight;
+
+    // 확률적으로 사분면을 반대로 선택
+    const preferLeft = pxNorm > 0.5;  // 마우스가 오른쪽이면 왼쪽을 선호
+    const preferTop  = pyNorm > 0.5;  // 마우스가 아래면 위를 선호
+
+    for (let i=0;i<30;i++){
+      let x = Math.random() * maxX + EDGE_PADDING;
+      let y = Math.random() * maxY + EDGE_PADDING;
+
+      // 선호 방향 가중 (자연스러운 범위)
+      if (Math.random() < 0.7){
+        if (preferLeft) x = Math.random() * (maxX*0.55) + EDGE_PADDING;
+        else           x = Math.random() * (maxX*0.55) + (maxX*0.45);
+        if (preferTop)  y = Math.random() * (maxY*0.55) + EDGE_PADDING;
+        else            y = Math.random() * (maxY*0.55) + (maxY*0.45);
+      }
+
+      const candidate = { x, y };
+      if (!isTooCloseToPointer(candidate)) return candidate;
+    }
+
+    // fallback
+    return {
+      x: clamp(pos.x + (Math.random()*200-100), EDGE_PADDING, maxX),
+      y: clamp(pos.y + (Math.random()*200-100), EDGE_PADDING, maxY)
+    };
+  }
+
+  function chooseNewTarget(force=false){
+    const now = Date.now();
+    // 타겟 너무 자주 바꾸면 "튀는 느낌" 나서 약간 텀 줌 (근데 가까우면 강제)
+    if (!force && now - lastTargetAt < 80) return;
+
+    target = randomTargetAway();
+    lastTargetAt = now;
+  }
+
+  // 매 프레임 이동 (연결된 움직임)
+  function animate(){
+    // 커서가 가까우면 타겟 갱신
+    if (isTooCloseToPointer(pos)) chooseNewTarget(true);
+
+    // 현재 → 타겟으로 빠르게 따라가기(부드러운 추격)
+    let dx = (target.x - pos.x) * FOLLOW;
+    let dy = (target.y - pos.y) * FOLLOW;
+
+    // 프레임당 이동량 제한(순간이동 느낌 제거)
+    const step = Math.hypot(dx, dy);
+    if (step > MAX_STEP){
+      const s = MAX_STEP / step;
+      dx *= s; dy *= s;
+    }
+
+    pos.x += dx;
+    pos.y += dy;
+
+    noBtn.style.left = pos.x + "px";
+    noBtn.style.top  = pos.y + "px";
+
+    rafId = requestAnimationFrame(animate);
+  }
+  // ✅ 시작과 동시에 animate()를 돌리지 말 것!
+  // requestAnimationFrame(animate);  <-- 삭제됨
+
+  // 포인터 위치 갱신
+  document.addEventListener("mousemove", (e) => {
+    pointer.x = e.clientX;
+    pointer.y = e.clientY;
+
+    // ✅ 가까워질 때만 시작
+    if (isTooCloseToPointer(pos)) startEscape();
+
+    // 시작한 뒤엔 더 못 잡게 타겟 자주 바꿈
+    if (started && isTooCloseToPointer(pos)) chooseNewTarget(true);
+  });
+
+  document.addEventListener("touchmove", (e) => {
+    const t = e.touches[0];
+    pointer.x = t.clientX;
+    pointer.y = t.clientY;
+
+    if (isTooCloseToPointer(pos)) startEscape();
+    if (started && isTooCloseToPointer(pos)) chooseNewTarget(true);
+  }, { passive:true });
+
+  // 누르려는 시도는 카운트 + 타겟 강제 변경
+  noBtn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    noAttempts += 1;
+    updateNoText();
+
+    startEscape();       // ✅ 여기서도 시작
+    chooseNewTarget(true);
+  });
+
+  // 클릭 방지
+  noBtn.addEventListener("click", (e) => e.preventDefault());
+
+  // 창 크기 바뀌면 화면 밖으로 안 나가게 타겟 재설정
+  window.addEventListener("resize", () => {
+    // 시작 전이면 그냥 위치 clamp만 해도 되지만, 간단히 강제 타겟 갱신
+    if (started) chooseNewTarget(true);
+  });
+
+})();
+</script>
+</body>
+</html>
